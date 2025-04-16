@@ -1,41 +1,67 @@
-FROM php:8.3-fpm
+# Use PHP with Apache as the base image
+FROM php:8.3-apache
 
-COPY . /var/www/html
-
-RUN apt update -y
-# install nginx
-RUN apt install -y \
-    zip \
-    libpq-dev \
+# Install Additional System Dependencies
+RUN apt-get update && apt-get install -y \
+    # vim \
     libzip-dev \
-    freetype \
-    libjpeg-turbo \
-    libpng \
-    freetype-dev \
-    libjpeg-turbo-dev \
+    libpq-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
     libpng-dev \
-    oniguruma-dev \
-    gettext-dev \
-    freetype-dev \
-    nginx \
-    && docker-php-ext-configure zip \
-    && docker-php-ext-install zip pdo pdo_pgsql \
-    && docker-php-ext-configure gd --with-freetype=/usr/include/ --with-jpeg=/usr/include/ \
-    && docker-php-ext-install -j$(nproc) gd \
-    && docker-php-ext-enable gd \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-enable bcmath \
-    && docker-php-ext-install exif \
-    && docker-php-ext-enable exif \
-    && docker-php-ext-install gettext \
-    && docker-php-ext-enable gettext \
-    && docker-php-ext-install opcache \
-    && docker-php-ext-enable opcache \
-    && docker-php-ext-enable pdo_pgsql \
-    && docker-php-ext-enable zip \
-    && rm -rf /var/cache/apk/*
+    zip
 
-COPY ./deploy/nginx.conf /etc/nginx/http.d/default.conf
-COPY ./deploy/php.ini "$PHP_INI_DIR/conf.d/app.ini"
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-CMD ["sh", "-c", "nginx && php-fpm"]
+# Enable Apache mod_rewrite for URL rewriting
+RUN a2enmod rewrite
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo_pgsql zip exif gd
+
+RUN docker-php-ext-configure gd \
+    --with-freetype=/usr/include/ \
+    --with-jpeg=/usr/include/
+
+# Configure Apache DocumentRoot to point to Laravel's public directory
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
+# Copy the application code
+# COPY . /var/www/html
+
+# Copy php.ini configuration file
+COPY deploy/php.ini /usr/local/etc/php/conf.d/
+
+# COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Set the working directory
+# WORKDIR /var/www/html
+
+# Install composer
+# COPY --from=composer:2.7.6 /usr/bin/composer /usr/bin/composer
+# Install Node.js and npm
+# Install project dependencies
+# RUN composer install --optimize-autoloader --no-scripts --no-progress --no-interaction --prefer-dist
+
+# RUN curl -sL https://deb.nodesource.com/setup_20.x | bash -
+
+# RUN apt-get update && apt-get install -y nodejs
+# Install npm dependencies
+# RUN npm ci
+# Build assets
+# RUN npm run prod
+
+# Set permissions
+# RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Expose port 80
+EXPOSE 80
+
+# ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# Set the default command to run when the container starts
+CMD ["apache2-foreground"]
